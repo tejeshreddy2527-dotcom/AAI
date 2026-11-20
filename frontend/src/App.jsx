@@ -1,25 +1,47 @@
 import { useState } from 'react';
 import './App.css';
 
+const API_URL = 'https://aai-apic.onrender.com';
+
 export default function App() {
   const [messages, setMessages] = useState([
     { sender: 'bot', text: 'Hi! Ask me anything.' }
   ]);
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed || loading) return;
 
-    const userMsg = { sender: 'user', text: trimmed };
-    const botReply = {
-      sender: 'bot',
-      text: `You said: "${trimmed}". Connect your backend or AI API here!`
-    };
-
-    setMessages((prev) => [...prev, userMsg, botReply]);
+    setMessages((prev) => [...prev, { sender: 'user', text: trimmed }]);
     setInput('');
+    setLoading(true);
+
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: trimmed })
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const replyText = data.reply ?? data.response ?? data.message ?? JSON.stringify(data);
+
+      setMessages((prev) => [...prev, { sender: 'bot', text: replyText }]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { sender: 'bot', text: `Request failed: ${err.message}` }
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -31,6 +53,7 @@ export default function App() {
             <strong>{msg.sender === 'user' ? 'You' : 'Bot'}:</strong> {msg.text}
           </div>
         ))}
+        {loading && <div style={{ opacity: 0.7 }}>Bot is typing...</div>}
       </div>
       <form onSubmit={handleSend} style={{ display: 'flex', gap: 8 }}>
         <input
@@ -39,8 +62,11 @@ export default function App() {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a message..."
           style={{ flex: 1, padding: 8 }}
+          disabled={loading}
         />
-        <button type="submit" style={{ padding: '8px 16px' }}>Send</button>
+        <button type="submit" style={{ padding: '8px 16px' }} disabled={loading}>
+          {loading ? 'Sending...' : 'Send'}
+        </button>
       </form>
     </div>
   );
